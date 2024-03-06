@@ -63,9 +63,6 @@ func Process(r io.Reader) (string, error) {
 			sumTemp += temp
 		}
 		avgTemp := sumTemp / float64(len(temps))
-
-		//log.Println("avg ==", avgTemp)
-
 		finalResult += fmt.Sprintf("%s=%.2f/%.2f/%.2f\n", city, minTemp, maxTemp, avgTemp)
 	}
 	return finalResult, nil
