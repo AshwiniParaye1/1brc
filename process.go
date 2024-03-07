@@ -2,68 +2,73 @@ package brc
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"sort"
 	"strconv"
-	"strings"
 )
 
 func Process(r io.Reader) (string, error) {
 	scanner := bufio.NewScanner(r)
 
-	// Create a map to store temperatures for each city
-	cityTemperatures := make(map[string][]float64)
+	cityTemperatures := make(map[string]struct {
+		min, max, sum float64
+		count         int
+	})
 
 	// Read lines from the input
 	for scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.Split(line, ";")
+		line := scanner.Bytes()
+		parts := bytes.SplitN(line, []byte(";"), 2) // Split only once to handle semicolons in city names
 		if len(parts) != 2 {
 			continue
 		}
+		city := string(parts[0])
+		tempsStr := parts[1]
 
-		city := parts[0]
-		tempsStr := strings.Split(parts[1], "/")
-
-		// Convert temperature strings to float and store them
-		for _, tempStr := range tempsStr {
-			temp, err := strconv.ParseFloat(tempStr, 64)
+		// Convert temperature strings to float and update city statistics
+		for _, tempStr := range bytes.Split(tempsStr, []byte("/")) {
+			temp, err := strconv.ParseFloat(string(tempStr), 64)
 			if err != nil {
-				log.Println("Error parsing temperature:", err)
-				panic(err)
+				return "", fmt.Errorf("error parsing temperature: %v", err)
 			}
-			cityTemperatures[city] = append(cityTemperatures[city], temp)
+			stats, ok := cityTemperatures[city]
+			if !ok {
+				stats.min, stats.max = temp, temp
+			} else {
+				if temp < stats.min {
+					stats.min = temp
+				}
+				if temp > stats.max {
+					stats.max = temp
+				}
+			}
+			stats.sum += temp
+			stats.count++
+			cityTemperatures[city] = stats
 		}
 	}
 
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+
 	// Get sorted list of cities
-	var cities []string
+	cities := make([]string, 0, len(cityTemperatures))
 	for city := range cityTemperatures {
 		cities = append(cities, city)
 	}
 	sort.Strings(cities)
 
-	var finalResult string
+	var buf bytes.Buffer
+
+	// Process temperatures for each city and append result to buf
 	for _, city := range cities {
-		temps := cityTemperatures[city]
-
-		minTemp := temps[0]
-		maxTemp := temps[0]
-		sumTemp := 0.0
-
-		for _, temp := range temps {
-			if temp < minTemp {
-				minTemp = temp
-			}
-			if temp > maxTemp {
-				maxTemp = temp
-			}
-			sumTemp += temp
-		}
-		avgTemp := sumTemp / float64(len(temps))
-		finalResult += fmt.Sprintf("%s=%.2f/%.2f/%.2f\n", city, minTemp, maxTemp, avgTemp)
+		stats := cityTemperatures[city]
+		avg := stats.sum / float64(stats.count)
+		buf.WriteString(fmt.Sprintf("%s=%.2f/%.2f/%.2f\n", city, stats.min, stats.max, avg))
 	}
-	return finalResult, nil
+
+	return buf.String(), nil
 }
